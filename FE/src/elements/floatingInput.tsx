@@ -44,7 +44,7 @@ const InputWrapper = styled.div`
 interface FloatingInputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
   placeholder: string;
-  staticPlaceholder: boolean;
+  staticPlaceholder?: boolean;
 }
 
 const FloatingInput = ({
