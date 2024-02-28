@@ -6,6 +6,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const ws = require("ws");
+const Message = require("./models/Message.ts");
 
 require("dotenv").config();
 
@@ -107,6 +108,28 @@ wss.on("connection", (connection, req) => {
         });
       }
     }
+    connection.on("message", async (message) => {
+      const messageData = JSON.parse(message.toString());
+      const { recipient, text } = messageData;
+      if (recipient && text) {
+        const messageDoc = await Message.create({
+          sender: connection.userId,
+          recipient,
+          text,
+        });
+        [...wss.clients]
+          .filter((u) => u.userId === recipient)
+          .forEach((c) =>
+            c.send(
+              JSON.stringify({
+                text,
+                sender: connection.userId,
+                id: messageDoc._id,
+              })
+            )
+          );
+      }
+    });
   }
 
   [...wss.clients].forEach((client) => {
