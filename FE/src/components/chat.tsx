@@ -1,7 +1,9 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Avatar from "./avatar";
 import Logo from "./logo";
 import { UserContext } from "../context/UserContext";
+import { uniqBy } from "lodash";
+import axios from "axios";
 
 type MessagesType = { text: string; isOur: boolean };
 
@@ -12,12 +14,20 @@ const Chat = () => {
   const { username, id } = useContext(UserContext);
   const [newMessageText, setNewMessageText] = useState("");
   const [messages, setMessages] = useState([]);
+  const divUnderMessages = useRef();
+
+  useEffect(() => {
+    connectToWs();
+  }, []);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:4040");
     setWs(ws);
     ws.addEventListener("message", handleMessage);
+    ws.addEventListener("close", () => {});
   }, []);
+
+  function connectToWs() {}
 
   function showOnlineUsers(usersArray: []) {
     const users = {};
@@ -34,12 +44,9 @@ const Chat = () => {
     const messageData = JSON.parse(event.data);
     if ("online" in messageData) {
       showOnlineUsers(messageData.online);
-    } else {
-      console.log(messageData);
-      setMessages((prev) => [
-        ...prev,
-        { isOur: false, text: messageData.text },
-      ]);
+    } else if ("text" in messageData) {
+      console.log({ messageData });
+      setMessages((prev) => [...prev, { ...messageData }]);
     }
   }
 
@@ -55,17 +62,40 @@ const Chat = () => {
     event.preventDefault();
     ws?.send(
       JSON.stringify({
-        message: {
-          recipient: selectedUserId,
-          text: newMessageText,
-        },
+        recipient: selectedUserId,
+        text: newMessageText,
       })
     );
     setMessages((prev) => {
-      return [...prev, { text: newMessageText, isOur: true }];
+      return [
+        ...prev,
+        {
+          text: newMessageText,
+          sender: id,
+          recipient: selectedUserId,
+          id: Date.now(),
+        },
+      ];
     });
+
     setNewMessageText("");
   };
+
+  useEffect(() => {
+    const div = divUnderMessages.current;
+    if (div) {
+      div.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (selectedUserId) {
+      //axios.get('/messages/'+selectedUserId)
+    }
+  }, [selectedUserId]);
+
+  const messagesWithoutDupe = uniqBy(messages, "id");
+  console.log(messagesWithoutDupe);
 
   return (
     <div className="flex h-screen">
@@ -95,20 +125,46 @@ const Chat = () => {
         })}
       </div>
       <div className=" flex flex-col bg-blue-100 w-2/3 p-2">
-        <div className="flex-grow flex items-center justify-center">
+        <div className="flex-grow">
           {!selectedUserId && (
-            <div className="text-slate-500">
-              Select an user to start a conversation
+            <div className="flex h-full flex-grow items-center justify-center">
+              <div className="text-slate-500">
+                Select an user to start a conversation
+              </div>
             </div>
           )}
+
           {!!selectedUserId && (
-            <div>
-              {messages?.map((msg) => {
-                return <div>{msg.text}</div>;
-              })}
+            <div className="relative h-full">
+              <div className="overflow-y-scroll absolute top-0 left-0 right-0 bottom-2 ">
+                {messagesWithoutDupe?.map((msg) => {
+                  return (
+                    <div
+                      className={msg.sender === id ? "text-right" : "text-left"}
+                    >
+                      <div
+                        className={
+                          "text-left inline-block p-2 my-2 rounded-md text-sm " +
+                          (msg.sender === id
+                            ? "bg-blue-500"
+                            : "bg-white text-gray-700")
+                        }
+                      >
+                        sender:{msg.sender}
+                        <br />
+                        my id:{id}
+                        <br />
+                        {msg.text}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={divUnderMessages}></div>
+              </div>
             </div>
           )}
         </div>
+
         {!!selectedUserId && (
           <form onSubmit={sendMessageHandler} className="flex gap-2">
             <input
