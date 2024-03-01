@@ -1,18 +1,15 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import Avatar from "./avatar";
 import Logo from "./logo";
 import { UserContext } from "../context/UserContext";
 import { uniqBy } from "lodash";
 import axios from "axios";
 import Contact from "./contact";
 
-type MessagesType = { text: string; isOur: boolean };
-
 const Chat = () => {
   const [ws, setWs] = useState<WebSocket>();
   const [onlineUsers, setOnlineUsers] = useState({});
   const [selectedUserId, setSelectedUserID] = useState("");
-  const { username, id } = useContext(UserContext);
+  const { username, id, setId, setUsername } = useContext(UserContext);
   const [newMessageText, setNewMessageText] = useState("");
   const [messages, setMessages] = useState([]);
   const [offlineUsers, setOfflineUsers] = useState({});
@@ -115,38 +112,60 @@ const Chat = () => {
     });
   }, [onlineUsers]);
 
-  useEffect(() => {
-    messagesWithoutDupe = uniqBy(messages, "_id");
-  }, [messages]);
+  messagesWithoutDupe = uniqBy(messages, "_id");
+
+  function logoutHandler() {
+    axios.post("/logout").then(() => {
+      setWs(null);
+      setId("");
+      setUsername("");
+    });
+  }
+
+  const sendFileHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files[0];
+    console.log(typeof file);
+  };
 
   return (
     <div className="flex h-screen">
-      <div className="bg-blue-50 w-1/3">
-        <Logo />
-        {Object.keys(onLineUsersExclCurrentUser).map((user) => {
-          return (
-            <Contact
-              key={user}
-              userid={user}
-              userName={onLineUsersExclCurrentUser[user]}
-              onClick={() => setSelectedUserID(user)}
-              selected={user === selectedUserId}
-              online={true}
-            />
-          );
-        })}
-        {Object.keys(offlineUsers).map((user) => {
-          return (
-            <Contact
-              key={user}
-              userid={user}
-              userName={offlineUsers[user].username}
-              onClick={() => setSelectedUserID(user)}
-              selected={user === selectedUserId}
-              online={false}
-            />
-          );
-        })}
+      <div className="bg-blue-50 w-1/3 flex flex-col">
+        <div className="flex-grow">
+          <Logo />
+          {Object.keys(onLineUsersExclCurrentUser).map((user) => {
+            return (
+              <Contact
+                key={user}
+                userid={user}
+                userName={onLineUsersExclCurrentUser[user]}
+                onClick={() => setSelectedUserID(user)}
+                selected={user === selectedUserId}
+                online={true}
+              />
+            );
+          })}
+          {Object.keys(offlineUsers).map((user) => {
+            return (
+              <Contact
+                key={user}
+                userid={user}
+                userName={offlineUsers[user].username}
+                onClick={() => setSelectedUserID(user)}
+                selected={user === selectedUserId}
+                online={false}
+              />
+            );
+          })}
+        </div>
+        <div className="p-2 text-center">
+          <span className="mr-2 text-sm text-gray-500">Welcome {username}</span>
+          <button
+            className="text-sm text-gray-600 bg-blue-200 py-1 px-2 border rounded-sm"
+            onClick={logoutHandler}
+          >
+            Log Out
+          </button>
+        </div>
       </div>
       <div className=" flex flex-col bg-blue-100 w-2/3 p-2">
         <div className="flex-grow">
@@ -195,6 +214,27 @@ const Chat = () => {
               placeholder="Type your message here"
               className="bg-white flex-grow border p-2 rounded-sm"
             ></input>
+            <label className="bg-blue-200 p-2 text-gray-500 cursor-pointer rounded-sm border border-blue-300">
+              <input
+                type="file"
+                className="hidden"
+                onChange={sendFileHandler}
+              />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-6 h-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13"
+                />
+              </svg>
+            </label>
             <button
               type="submit"
               className="bg-blue-400 p-2 text-white rounded-sm"

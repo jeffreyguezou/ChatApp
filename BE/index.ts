@@ -63,6 +63,10 @@ app.post("/login", async (req, res) => {
   }
 });
 
+app.post("/logout", (req, res) => {
+  res.cookie("token", "", { sameSite: "none", secure: true }).json("ok");
+});
+
 async function getUserDataFromRequest(req) {
   return new Promise((resolve, reject) => {
     const token = req.cookies?.token;
@@ -123,7 +127,36 @@ const server = app.listen(4040);
 
 const wss = new ws.WebSocketServer({ server });
 
+function notifyAboutOnlineUsers() {
+  [...wss.clients].forEach((client) => {
+    client.send(
+      JSON.stringify({
+        online: [...wss.clients].map((c) => ({
+          userId: c.userId,
+          username: c.username,
+        })),
+      })
+    );
+  });
+}
+
 wss.on("connection", (connection, req) => {
+  connection.isAlive = true;
+
+  connection.timer = setInterval(() => {
+    connection.ping();
+    connection.deathTimer = setTimeout(() => {
+      connection.isAlive = false;
+      clearInterval(connection.timer);
+      connection.terminate();
+      notifyAboutOnlineUsers();
+    }, 1000);
+  }, 5000);
+
+  connection.on("pong", () => {
+    clearTimeout(connection.deathTimer);
+  });
+
   const cookies = req.headers.cookie;
   if (cookies) {
     const tokenCookieString = cookies
@@ -164,15 +197,5 @@ wss.on("connection", (connection, req) => {
         );
     }
   });
-
-  [...wss.clients].forEach((client) => {
-    client.send(
-      JSON.stringify({
-        online: [...wss.clients].map((c) => ({
-          userId: c.userId,
-          username: c.username,
-        })),
-      })
-    );
-  });
+  notifyAboutOnlineUsers();
 });
