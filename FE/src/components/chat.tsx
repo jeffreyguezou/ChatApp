@@ -4,6 +4,7 @@ import Logo from "./logo";
 import { UserContext } from "../context/UserContext";
 import { uniqBy } from "lodash";
 import axios from "axios";
+import Contact from "./contact";
 
 type MessagesType = { text: string; isOur: boolean };
 
@@ -14,20 +15,28 @@ const Chat = () => {
   const { username, id } = useContext(UserContext);
   const [newMessageText, setNewMessageText] = useState("");
   const [messages, setMessages] = useState([]);
+  const [offlineUsers, setOfflineUsers] = useState({});
   const divUnderMessages = useRef();
+  let messagesWithoutDupe;
 
   useEffect(() => {
     connectToWs();
   }, []);
 
   useEffect(() => {
+    connectToWs();
+  }, []);
+
+  function connectToWs() {
     const ws = new WebSocket("ws://localhost:4040");
     setWs(ws);
     ws.addEventListener("message", handleMessage);
-    ws.addEventListener("close", () => {});
-  }, []);
-
-  function connectToWs() {}
+    ws.addEventListener("close", () => {
+      setTimeout(() => {
+        connectToWs();
+      }, 1000);
+    });
+  }
 
   function showOnlineUsers(usersArray: []) {
     const users = {};
@@ -50,10 +59,6 @@ const Chat = () => {
     }
   }
 
-  function selectContact(userId: string) {
-    setSelectedUserID(userId);
-  }
-
   const messageChangeHandler = (event: React.FormEvent<HTMLInputElement>) => {
     setNewMessageText(event.currentTarget.value);
   };
@@ -73,7 +78,7 @@ const Chat = () => {
           text: newMessageText,
           sender: id,
           recipient: selectedUserId,
-          id: Date.now(),
+          _id: Date.now(),
         },
       ];
     });
@@ -90,12 +95,29 @@ const Chat = () => {
 
   useEffect(() => {
     if (selectedUserId) {
-      //axios.get('/messages/'+selectedUserId)
+      axios.get("/messages/" + selectedUserId).then((res) => {
+        const { data } = res;
+        setMessages(data);
+      });
     }
   }, [selectedUserId]);
 
-  const messagesWithoutDupe = uniqBy(messages, "id");
-  console.log(messagesWithoutDupe);
+  useEffect(() => {
+    axios.get("/people").then((res) => {
+      const offlineUsersArray = res.data
+        .filter((p) => p._id !== id)
+        .filter((p) => !Object.keys(onlineUsers).includes(p._id));
+      const offlineUsers = {};
+      offlineUsersArray.forEach((element) => {
+        offlineUsers[element._id] = element;
+      });
+      setOfflineUsers(offlineUsers);
+    });
+  }, [onlineUsers]);
+
+  useEffect(() => {
+    messagesWithoutDupe = uniqBy(messages, "_id");
+  }, [messages]);
 
   return (
     <div className="flex h-screen">
@@ -103,24 +125,26 @@ const Chat = () => {
         <Logo />
         {Object.keys(onLineUsersExclCurrentUser).map((user) => {
           return (
-            <div
-              onClick={() => {
-                selectContact(user);
-              }}
-              className={
-                "border-b border-gray-100 flex items-center gap-2 cursor-pointer " +
-                (user === selectedUserId ? "bg-blue-100" : "")
-              }
+            <Contact
               key={user}
-            >
-              {user === selectedUserId && (
-                <div className="w-1 bg-blue-500 h-12 rounded-r-md"></div>
-              )}
-              <div className="flex gap-2 py-2 pl-4 items-center">
-                <Avatar username={onlineUsers[user]} userID={user} />
-                <span className="text-gray-800">{onlineUsers[user]}</span>
-              </div>
-            </div>
+              userid={user}
+              userName={onLineUsersExclCurrentUser[user]}
+              onClick={() => setSelectedUserID(user)}
+              selected={user === selectedUserId}
+              online={true}
+            />
+          );
+        })}
+        {Object.keys(offlineUsers).map((user) => {
+          return (
+            <Contact
+              key={user}
+              userid={user}
+              userName={offlineUsers[user].username}
+              onClick={() => setSelectedUserID(user)}
+              selected={user === selectedUserId}
+              online={false}
+            />
           );
         })}
       </div>
@@ -140,6 +164,7 @@ const Chat = () => {
                 {messagesWithoutDupe?.map((msg) => {
                   return (
                     <div
+                      key={msg._id}
                       className={msg.sender === id ? "text-right" : "text-left"}
                     >
                       <div
@@ -150,10 +175,6 @@ const Chat = () => {
                             : "bg-white text-gray-700")
                         }
                       >
-                        sender:{msg.sender}
-                        <br />
-                        my id:{id}
-                        <br />
                         {msg.text}
                       </div>
                     </div>

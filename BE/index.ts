@@ -24,6 +24,11 @@ app.get("/test", (req, res) => {
   res.json("test ok");
 });
 
+app.get("/people", async (req, res) => {
+  const users = await User.find({}, { _id: 1, username: 1 }).exec();
+  res.json(users);
+});
+
 app.get("/profile", (req, res) => {
   const token = req.cookies?.token;
   if (token) {
@@ -80,7 +85,7 @@ app.get("/messages/:userId", async (req, res) => {
     sender: { $in: [userId, ourUserId] },
     recipient: { $in: [userId, ourUserId] },
   })
-    .sort({ createdAt: -1 })
+    .sort({ createdAt: 1 })
     .exec();
   res.json(messages);
 });
@@ -153,7 +158,7 @@ wss.on("connection", (connection, req) => {
             JSON.stringify({
               text,
               sender: connection.userId,
-              id: messageDoc._id,
+              _id: messageDoc._id,
             })
           )
         );
