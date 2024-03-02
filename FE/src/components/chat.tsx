@@ -5,15 +5,27 @@ import { uniqBy } from "lodash";
 import axios from "axios";
 import Contact from "./contact";
 
+type MessageObj = {
+  _id: string;
+  sender: string;
+  recipient: string;
+  text: string;
+  file: string;
+};
+type UserObj = {
+  _id: string;
+  username: string;
+};
+
 const Chat = () => {
-  const [ws, setWs] = useState<WebSocket>();
+  const [ws, setWs] = useState<WebSocket | null>();
   const [onlineUsers, setOnlineUsers] = useState({});
   const [selectedUserId, setSelectedUserID] = useState("");
   const { username, id, setId, setUsername } = useContext(UserContext);
   const [newMessageText, setNewMessageText] = useState("");
   const [messages, setMessages] = useState([]);
   const [offlineUsers, setOfflineUsers] = useState({});
-  const divUnderMessages = useRef();
+  const divUnderMessages = useRef<HTMLDivElement | null>(null);
   let messagesWithoutDupe;
 
   useEffect(() => {
@@ -43,7 +55,9 @@ const Chat = () => {
     setOnlineUsers(users);
   }
 
-  const onLineUsersExclCurrentUser = { ...onlineUsers };
+  const onLineUsersExclCurrentUser: { [index: string]: any } = {
+    ...onlineUsers,
+  };
   delete onLineUsersExclCurrentUser[id];
 
   function handleMessage(event: { data: string }) {
@@ -51,8 +65,9 @@ const Chat = () => {
     if ("online" in messageData) {
       showOnlineUsers(messageData.online);
     } else if ("text" in messageData) {
-      console.log({ messageData });
-      setMessages((prev) => [...prev, { ...messageData }]);
+      if (messageData.sender === selectedUserId) {
+        setMessages((prev) => [...prev, { ...messageData }]);
+      }
     }
   }
 
@@ -60,12 +75,16 @@ const Chat = () => {
     setNewMessageText(event.currentTarget.value);
   };
 
-  const sendMessageHandler = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const sendMessageHandler = (
+    event: React.FormEvent<HTMLFormElement>,
+    file: null | string = null
+  ) => {
+    if (event) event.preventDefault();
     ws?.send(
       JSON.stringify({
         recipient: selectedUserId,
         text: newMessageText,
+        file,
       })
     );
     setMessages((prev) => {
@@ -79,6 +98,12 @@ const Chat = () => {
         },
       ];
     });
+    if (file) {
+      axios.get("/messages/" + selectedUserId).then((res) => {
+        const { data } = res;
+        setMessages(data);
+      });
+    }
 
     setNewMessageText("");
   };
@@ -101,11 +126,13 @@ const Chat = () => {
 
   useEffect(() => {
     axios.get("/people").then((res) => {
+      console.log(res.data);
       const offlineUsersArray = res.data
-        .filter((p) => p._id !== id)
-        .filter((p) => !Object.keys(onlineUsers).includes(p._id));
-      const offlineUsers = {};
-      offlineUsersArray.forEach((element) => {
+        .filter((p: UserObj) => p._id !== id)
+        .filter((p: UserObj) => !Object.keys(onlineUsers).includes(p._id));
+      console.log(offlineUsersArray);
+      const offlineUsers: { [index: string]: any } = {};
+      offlineUsersArray.forEach((element: UserObj) => {
         offlineUsers[element._id] = element;
       });
       setOfflineUsers(offlineUsers);
@@ -123,8 +150,15 @@ const Chat = () => {
   }
 
   const sendFileHandler = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files[0];
-    console.log(typeof file);
+    const reader = new FileReader();
+    if (!event.target.files) return;
+    reader.readAsDataURL(event.target.files[0]);
+    reader.onload = () => {
+      sendMessageHandler(null, {
+        name: event.target.files[0].name,
+        data: reader.result,
+      });
+    };
   };
 
   return (
@@ -180,7 +214,8 @@ const Chat = () => {
           {!!selectedUserId && (
             <div className="relative h-full">
               <div className="overflow-y-scroll absolute top-0 left-0 right-0 bottom-2 ">
-                {messagesWithoutDupe?.map((msg) => {
+                {messagesWithoutDupe?.map((msg: MessageObj) => {
+                  console.log(msg);
                   return (
                     <div
                       key={msg._id}
@@ -195,6 +230,33 @@ const Chat = () => {
                         }
                       >
                         {msg.text}
+                        {msg.file && (
+                          <div>
+                            <a
+                              target="_blank"
+                              className="underline flex items-center gap-1"
+                              href={
+                                axios.defaults.baseURL + "/uploads/" + msg.file
+                              }
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.5}
+                                stroke="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13"
+                                />
+                              </svg>
+                              {msg.file}
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
